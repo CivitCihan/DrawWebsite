@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Çekiliş Uygulaması</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background: url('background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #000;
+        }
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            border: 3px solid #d4af37; /* Altın rengi çerçeve */
+            border-radius: 15px;
+            background-color: rgba(255, 255, 255, 0.9); /* Şeffaf beyaz arka plan */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .header img {
+            width: 100px;
+            height: 100px;
+            margin-right: 15px;
+        }
+        .header h1 {
+            font-size: 32px;
+            font-weight: bold;
+            color: #d4af37; /* Altın rengi başlık */
+        }
+        input[type="file"], select, button {
+            margin: 10px 0;
+            padding: 10px 15px;
+            font-size: 16px;
+            border: 2px solid #000;
+            border-radius: 5px;
+            background-color: #d4af37; /* Altın rengi butonlar */
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        input[type="file"] {
+            border: 2px solid #d4af37;
+            background-color: #fff;
+            color: #000;
+        }
+        input[type="file"]:hover {
+            border: 2px solid #c1272d; /* Kırmızı sınır */
+        }
+        button:hover {
+            background-color: #c1272d; /* Kırmızı buton hover */
+        }
+        select {
+            background-color: #fff;
+            color: #000;
+        }
+        .result-item {
+            background: #fff; /* Kırmızı sonuç kutusu */
+            color: #000;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            border-color: #c1272d;
+            border-width: 1px;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="logo.png" alt="Logo">
+            <h1>Çınar Çeyiz Çekiliş</h1>
+        </div>
+        <label for="namesFile">Müşteri:</label>
+        <input type="file" id="namesFile" accept=".csv" onchange="loadNames(event)">
+        
+        <label for="productsFile">Ürün:</label>
+        <input type="file" id="productsFile" accept=".csv" onchange="loadProducts(event)">
+        
+        <button onclick="showProducts()">Ürünleri Göster</button>
+        <select id="productSelect" style="display: none;" onchange="enableDrawButton()">
+            <option value="" disabled selected>Ürün Seçin</option>
+        </select>
+        <button id="drawButton" style="display: none;" onclick="drawSelectedProduct()">Seçilen Ürün için Çekiliş Yap</button>
+        <button onclick="downloadResults()">Sonuçları CSV'ye Aktar</button>
+        <div id="results"></div>
+    </div>
+
+
+    <script>
+        let names = [];
+        let products = [];
+        const drawResults = [];
+        const winnersList = new Set(); // Kazananları takip etmek için Set
+
+        // Müşteri listesini yükle
+        function loadNames(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                alert("Lütfen bir müşteri dosyası seçin!");
+                return;
+            }
+            Papa.parse(file, {
+                complete: function(results) {
+                    names = results.data.flat().map(name => name?.trim()).filter(name => name);
+                    if (names.length === 0) {
+                        alert("Müşteri dosyası boş veya hatalı!");
+                    } else {
+                        alert(`Müşteri listesi başarıyla yüklendi! Toplam ${names.length} müşteri yüklendi.`);
+                    }
+                },
+                error: function(error) {
+                    alert("Müşteri dosyası okunurken bir hata oluştu: " + error.message);
+                },
+                skipEmptyLines: true
+            });
+        }
+
+        // Ürün listesini yükle
+        function loadProducts(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                alert("Lütfen bir ürün dosyası seçin!");
+                return;
+            }
+            Papa.parse(file, {
+                complete: function(results) {
+                    products = results.data.map(row => ({
+                        name: row[0]?.trim(),
+                        quantity: parseInt(row[1]?.trim(), 10) || 0
+                    })).filter(product => product.name && product.quantity > 0);
+
+                    if (products.length === 0) {
+                        alert("Ürün dosyası boş veya hatalı!");
+                    } else {
+                        alert(`Ürün listesi başarıyla yüklendi! Toplam ${products.length} ürün bulundu.`);
+                    }
+                },
+                error: function(error) {
+                    alert("Ürün dosyası okunurken bir hata oluştu: " + error.message);
+                },
+                skipEmptyLines: true
+            });
+        }
+
+        // Ürünleri göster
+        function showProducts() {
+            if (products.length === 0) {
+                alert("Ürün listesi yüklenmedi!");
+                return;
+            }
+
+            const productSelect = document.getElementById("productSelect");
+            productSelect.style.display = "block";
+            productSelect.innerHTML = `<option value="" disabled selected>Ürün Seçin</option>`;
+            products.forEach((product, index) => {
+                const option = document.createElement("option");
+                option.value = index;
+                option.textContent = `${product.name} (Adet: ${product.quantity})`;
+                productSelect.appendChild(option);
+            });
+        }
+
+        // Seçilen ürüne göre çekiliş
+        function drawSelectedProduct() {
+            const productSelect = document.getElementById("productSelect");
+            const selectedIndex = productSelect.value;
+
+            if (selectedIndex === "") {
+                alert("Lütfen bir ürün seçin!");
+                return;
+            }
+
+            const product = products[selectedIndex];
+            const availableNames = names.filter(name => !winnersList.has(name)); // Kazanmamış müşteriler
+            if (availableNames.length < product.quantity) {
+                alert("Yeterli müşteri yok!");
+                return;
+            }
+
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+            const winners = [];
+
+            for (let i = 0; i < product.quantity; i++) {
+                const winnerIndex = Math.floor(Math.random() * availableNames.length);
+                const winner = availableNames.splice(winnerIndex, 1)[0];
+                winnersList.add(winner); // Kazananları Set'e ekle
+
+                const backupIndex = Math.floor(Math.random() * availableNames.length);
+                const backup = availableNames.splice(backupIndex, 1)[0];
+                winners.push({ product: product.name, winner, backup });
+
+                const resultItem = document.createElement("div");
+                resultItem.className = "result-item";
+                resultItem.textContent = `Ürün: ${product.name}, Asil: ${winner}, Yedek: ${backup}`;
+                resultsDiv.appendChild(resultItem);
+
+                // Sonuçları kaydet
+                drawResults.push({ Ürün: product.name, Asil: winner, Yedek: backup });
+            }
+        }
+
+        // Çekiliş butonunu etkinleştir
+        function enableDrawButton() {
+            const drawButton = document.getElementById("drawButton");
+            drawButton.style.display = "inline-block";
+        }
+
+        // Sonuçları CSV'ye aktar
+        function downloadResults() {
+            if (drawResults.length === 0) {
+                alert("Lütfen önce çekiliş yapın!");
+                return;
+            }
+
+            const csvContent = drawResults.map(row => `${row["Ürün"]},${row["Asil"]},${row["Yedek"]}`).join("\n");
+            const blob = new Blob([`Ürün,Asil,Yedek\n${csvContent}`], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "sonuclar.csv";
+            link.click();
+        }
+    </script>
+</body>
+</html>
